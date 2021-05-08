@@ -52,7 +52,7 @@ func NewWrapKitLogger(pref string, depth int) *wrapKitLogger {
 		Logger:    log.New(os.Stdout, "[["+pref+"]]", logFlags),
 		typeLog:   pref,
 		callDepth: depth,
-		toOther:   &multiWriter{},
+		toOther:   newMultiWriter(),
 	}
 }
 
@@ -82,19 +82,11 @@ const (
 )
 
 func (logger *wrapKitLogger) addWriter(newWriters ...io.Writer) {
-	loggermultiwriter := logger.toOther.(*multiWriter)
-	for _, newWriter := range newWriters {
-		if newWriter != nil {
-			loggermultiwriter.Append(newWriter)
-		}
-	}
+	logger.toOther.(*multiWriter).Append(newWriters...)
 }
 
 func (logger *wrapKitLogger) deleteWriter(writersToDelete ...io.Writer) {
-	loggermultiwriter := logger.toOther.(*multiWriter)
-	for _, newWriter := range writersToDelete {
-		loggermultiwriter.Remove(newWriter)
-	}
+	logger.toOther.(*multiWriter).Remove(writersToDelete...)
 }
 
 // SetWriters for logs
@@ -174,7 +166,6 @@ type logMess struct {
 	Message string    `json:"message"`
 	Now     time.Time `json:"@timestamp"`
 	Level   string    `json:"level"`
-	//vars    [] interface{} `json:"vars"`
 }
 
 func NewlogMess(mess string, logger *wrapKitLogger) *logMess {
