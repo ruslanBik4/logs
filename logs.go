@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -52,7 +53,7 @@ func NewWrapKitLogger(pref string, depth int) *wrapKitLogger {
 		Logger:    log.New(os.Stdout, "[["+pref+"]]", logFlags),
 		typeLog:   pref,
 		callDepth: depth,
-		toOther:   newMultiWriter(),
+		toOther:   &MultiWriter{lock: sync.RWMutex{}},
 	}
 }
 
@@ -82,11 +83,11 @@ const (
 )
 
 func (logger *wrapKitLogger) addWriter(newWriters ...io.Writer) {
-	logger.toOther.(*multiWriter).Append(newWriters...)
+	logger.toOther.(*MultiWriter).Append(newWriters...)
 }
 
 func (logger *wrapKitLogger) deleteWriter(writersToDelete ...io.Writer) {
-	logger.toOther.(*multiWriter).Remove(writersToDelete...)
+	logger.toOther.(*MultiWriter).Remove(writersToDelete...)
 }
 
 // SetWriters for logs

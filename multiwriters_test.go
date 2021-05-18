@@ -19,7 +19,7 @@ func TestErrorLogOthers(t *testing.T) {
 		wg.Add(2)
 
 		fwriter := fakeWriter{wg}
-		mw := logErr.toOther.(*multiWriter)
+		mw := logErr.toOther.(*MultiWriter)
 
 		SetWriters(fwriter, FgErr)
 		SetWriters(fwriter, FgErr)
@@ -41,7 +41,7 @@ func TestErrorLogOthers(t *testing.T) {
 
 }
 
-func RemoveTest(mw *multiWriter, w io.Writer, wg *sync.WaitGroup) {
+func RemoveTest(mw *MultiWriter, w io.Writer, wg *sync.WaitGroup) {
 	old_len := len(mw.writers)
 	mw.Remove(w)
 	if old_len == len(mw.writers)+1 {
@@ -54,9 +54,9 @@ func TestRemoveOneMultiwriter(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	b := testWriter2{wg, "Second"}
-	m := MultiWriter(b)
+	m := NewMultiWriter(b)
 
-	mw := m.(*multiWriter)
+	mw := m.(*MultiWriter)
 
 	RemoveTest(mw, b, wg)
 
@@ -73,22 +73,22 @@ func TestLogsMultiwriter(t *testing.T) {
 	runtime.GOMAXPROCS(3)
 	wg := &sync.WaitGroup{}
 
-	wg.Add(2)
 	a := testWriter{wg, "first"}
 	b := testWriter2{wg, "Second"}
-	m := MultiWriter(a, a)
-	m = MultiWriter(m, a)
+	m := NewMultiWriter(a, a)
+	m = NewMultiWriter(m, a)
 
-	mw := m.(*multiWriter)
+	mw := m.(*MultiWriter)
 
 	mw.Append(a, b)
-	mw.Remove(a)
+	mw.Remove(b)
 	mw.Append(b)
 
+	wg.Add(len(mw.writers))
 	data := []byte("Hello ")
 	_, e := m.Write(data)
 	if e != nil {
-		panic(e)
+		t.Fatal(e)
 	}
 	wg.Wait()
 }
@@ -96,14 +96,14 @@ func TestLogsMultiwriter(t *testing.T) {
 func TestErrorsMultiwriter(t *testing.T) {
 	a := testErrorWriter{}
 	b := testBadWriter{}
-	m := MultiWriter(a, a)
-	m = MultiWriter(m, a)
-	m = MultiWriter(m, b)
+	m := NewMultiWriter(a, a)
+	m = NewMultiWriter(m, a)
+	m = NewMultiWriter(m, b)
 
 	for i := 0; i < 2; i++ {
 		_, e := m.Write([]byte("Hello "))
 		if errMultiwriter, ok := e.(MultiwriterErr); ok {
-			assert.Equal(t, 3, len(errMultiwriter.ErrorsList))
+			assert.Equal(t, len(m.(*MultiWriter).writers), len(errMultiwriter.ErrorsList))
 			for _, writerErr := range errMultiwriter.ErrorsList {
 				fmt.Printf("error: %v, writer:%v\n", writerErr.Err, writerErr.Wr)
 			}
@@ -112,14 +112,14 @@ func TestErrorsMultiwriter(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, 3, len(m.(*multiWriter).writers))
+	assert.Equal(t, 3, len(m.(*MultiWriter).writers))
 }
 
 type testErrorWriter struct{}
 
 func (tew testErrorWriter) Write(b []byte) (int, error) {
 	fmt.Println("testErrorWriter: ", string(b))
-	return len(b), errors.New("TestErrorWrite Error occured")
+	return len(b), errors.New("TestErrorWrite Error occurred")
 }
 
 type testBadWriter struct{}
@@ -136,6 +136,7 @@ type testWriter struct {
 
 func (tw testWriter) Write(b []byte) (int, error) {
 	fmt.Println(boldcolors[WARNING] + tw.name + "|| testWriter writer: " + string(b) + LogEndColor)
+	tw.wg.Done()
 	return len(b), nil
 }
 

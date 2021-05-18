@@ -34,30 +34,45 @@ type WriterErr struct {
 	Wr  io.Writer
 }
 
-type multiWriter struct {
+type MultiWriter struct {
 	writers []io.Writer
 	lock    sync.RWMutex
 }
 
-func newMultiWriter(writers ...io.Writer) *multiWriter {
-	return &multiWriter{writers, sync.RWMutex{}}
+// NewMultiWriter creates a MultiWriter
+func NewMultiWriter(writers ...io.Writer) io.Writer {
+	allWriters := make([]io.Writer, 0, len(writers))
+	for _, w := range writers {
+		if mw, ok := w.(*MultiWriter); ok {
+			allWriters = append(allWriters, mw.writers...)
+		} else {
+			allWriters = append(allWriters, w)
+		}
+	}
+
+	return &MultiWriter{allWriters, sync.RWMutex{}}
 }
 
-func (t *multiWriter) Write(p []byte) (n int, err error) {
-	errList := make([]WriterErr, len(t.writers))
+func (t *MultiWriter) Write(p []byte) (int, error) {
+	errList := make([]WriterErr, 0)
 	t.lock.RLock()
-	defer t.lock.RUnlock()
+	defer func() {
+		t.lock.RUnlock()
+		for _, item := range errList {
+			if item.Err == ErrBadWriter {
+				t.Remove(item.Wr)
+				break
+			}
+		}
+	}()
 
 	for _, w := range t.writers {
-		n, err = w.Write(p)
+		n, err := w.Write(p)
 
 		if err == ErrBadWriter {
-			t.Remove(w)
-			ErrorLog(ErrBadWriter, w)
-			err = nil
+			errList = append(errList, WriterErr{err, w})
 		} else if err != nil {
 			errList = append(errList, WriterErr{err, w})
-			err = nil
 		}
 
 		if n != len(p) {
@@ -73,7 +88,7 @@ func (t *multiWriter) Write(p []byte) (n int, err error) {
 }
 
 // Remove Removes all writers that are identical to the writer we need to remove
-func (t *multiWriter) Remove(writers ...io.Writer) {
+func (t *MultiWriter) Remove(writers ...io.Writer) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -88,19 +103,19 @@ func (t *multiWriter) Remove(writers ...io.Writer) {
 }
 
 // Append Appends each writer passed as single writer entity. If multiwriter is passed, appends it as single writer.
-func (t *multiWriter) Append(writers ...io.Writer) {
+func (t *MultiWriter) Append(writers ...io.Writer) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.writers = append(t.writers, writers...)
 }
 
 // AppendWritersSeparately If multiwriter is passed, appends each writer of multiwriter separately
-func (t *multiWriter) AppendWritersSeparately(writers ...io.Writer) {
+func (t *MultiWriter) AppendWritersSeparately(writers ...io.Writer) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	for _, w := range writers {
-		if mw, ok := w.(*multiWriter); ok {
+		if mw, ok := w.(*MultiWriter); ok {
 			t.writers = append(t.writers, mw.writers...)
 		} else {
 			t.writers = append(t.writers, w)
@@ -108,9 +123,9 @@ func (t *multiWriter) AppendWritersSeparately(writers ...io.Writer) {
 	}
 }
 
-var _ io.StringWriter = (*multiWriter)(nil)
+var _ io.StringWriter = (*MultiWriter)(nil)
 
-func (t *multiWriter) WriteString(s string) (n int, err error) {
+func (t *MultiWriter) WriteString(s string) (n int, err error) {
 	p := []byte(s)
 	errList := make([]WriterErr, len(t.writers))
 	t.lock.RLock()
@@ -133,18 +148,4 @@ func (t *multiWriter) WriteString(s string) (n int, err error) {
 	}
 
 	return len(s), nil
-}
-
-// MultiWriter creates a multiwriter
-func MultiWriter(writers ...io.Writer) io.Writer {
-	allWriters := make([]io.Writer, 0, len(writers))
-	for _, w := range writers {
-		if mw, ok := w.(*multiWriter); ok {
-			allWriters = append(allWriters, mw.writers...)
-		} else {
-			allWriters = append(allWriters, w)
-		}
-	}
-
-	return &multiWriter{allWriters, sync.RWMutex{}}
 }
