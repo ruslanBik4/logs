@@ -42,6 +42,7 @@ type wrapKitLogger struct {
 	toSentry  bool
 	sentryOrg string
 	toOther   io.Writer
+	lock      sync.RWMutex
 }
 
 const logFlags = log.Lshortfile | log.Ltime
@@ -191,7 +192,6 @@ func (logger *wrapKitLogger) Printf(vars ...interface{}) {
 			logger.fileName,
 			logger.line,
 			mess)
-
 	}
 
 	if logger.toOther != nil {

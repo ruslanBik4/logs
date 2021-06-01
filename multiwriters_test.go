@@ -102,7 +102,7 @@ func TestErrorsMultiwriter(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		_, e := m.Write([]byte("Hello "))
-		if errMultiwriter, ok := e.(MultiwriterErr); ok {
+		if errMultiwriter, ok := e.(MultiWriterErr); ok {
 			assert.Equal(t, len(m.(*MultiWriter).writers), len(errMultiwriter.ErrorsList))
 			for _, writerErr := range errMultiwriter.ErrorsList {
 				fmt.Printf("error: %v, writer:%v\n", writerErr.Err, writerErr.Wr)

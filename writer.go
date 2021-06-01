@@ -72,7 +72,7 @@ func changeShortName(file string) (short string) {
 	return short
 }
 
-// DebugLog output formated(function and line calls) debug information
+// DebugLog output formatted(function and line calls) debug information
 func DebugLog(args ...interface{}) {
 	if *fDebug {
 		pc, _, _, _ := runtime.Caller(logDebug.callDepth - 2)
@@ -114,6 +114,8 @@ func timeLogFormat() string {
 
 // ErrorLog - output formatted (function and line calls) error information
 func ErrorLog(err error, args ...interface{}) {
+	logErr.lock.Lock()
+	defer logErr.lock.Unlock()
 
 	if err == nil {
 		return

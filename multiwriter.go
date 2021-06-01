@@ -9,19 +9,19 @@ import (
 
 var ErrBadWriter = errors.New("ErrBadWriter, it will be deleted from multiwriter")
 
-type MultiwriterErr struct {
+type MultiWriterErr struct {
 	ErrorsList []WriterErr
 }
 
-func (mwe MultiwriterErr) Error() string {
-	return "MultiwriterErr: some writers have errors:\n" + mwe.String()
+func (mwe MultiWriterErr) Error() string {
+	return "MultiWriterErr: some writers have errors: " + mwe.String()
 }
 
-func (mwe MultiwriterErr) String() string {
+func (mwe MultiWriterErr) String() string {
 	endl := ""
 	retStr := ""
 	for _, writerErr := range mwe.ErrorsList {
-		retStr += fmt.Sprintf("%sError during write toOther: %v, writer: %v",
+		retStr += fmt.Sprintf("%s %s, writer: %v",
 			endl, writerErr.Err, writerErr.Wr)
 		endl = "\n"
 	}
@@ -81,7 +81,7 @@ func (t *MultiWriter) Write(p []byte) (int, error) {
 	}
 
 	if len(errList) > 0 {
-		return len(p), MultiwriterErr{errList}
+		return len(p), MultiWriterErr{errList}
 	}
 
 	return len(p), nil
