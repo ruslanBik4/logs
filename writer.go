@@ -78,6 +78,9 @@ func changeShortName(file string) (short string) {
 // DebugLog output formatted(function and line calls) debug information
 func DebugLog(args ...interface{}) {
 	if *fDebug {
+		logDebug.lock.Lock()
+		defer logDebug.lock.Unlock()
+
 		pc, _, _, _ := runtime.Caller(logDebug.callDepth - 2)
 		logDebug.funcName = changeShortName(runtime.FuncForPC(pc).Name())
 
