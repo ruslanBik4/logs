@@ -55,8 +55,11 @@ type errLogPrint bool
 func Fatal(err error, args ...interface{}) {
 	pc, _, _, _ := runtime.Caller(2)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	logErr.Output(2, fmt.Sprintf("[FATAL];%v;%v;%v", changeShortName(runtime.FuncForPC(pc).Name()),
+	err = logErr.Output(2, fmt.Sprintf("[FATAL];%v;%v;%v", changeShortName(runtime.FuncForPC(pc).Name()),
 		err, getArgsString(args...)))
+	if err != nil {
+		fmt.Print(err)
+	}
 	os.Exit(1)
 
 }
@@ -80,15 +83,6 @@ func DebugLog(args ...interface{}) {
 
 		logDebug.Printf(args...)
 	}
-}
-
-// TraceLog output formatted(function and line calls) debug information
-func TraceLog(args ...interface{}) {
-	//var message string
-	if *fDebug {
-		logDebug.Printf(append([]interface{}{"%+v"}, args...)...)
-	}
-	logDebug.Printf("%v %s: %s:", time.Now(), args[0], args[1])
 }
 
 // StatusLog output formatted information for status
@@ -223,7 +217,9 @@ func ErrorStack(err error, args ...interface{}) {
 		stackLine = GetStack(stackBeginWith, stackLine)
 	}
 
+	logErr.lock.Lock()
 	logErr.Printf(errLogPrint(true), stackLine)
+	logErr.lock.Unlock()
 }
 
 func GetStack(i int, stackLine string) string {
