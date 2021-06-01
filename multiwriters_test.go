@@ -93,6 +93,10 @@ func TestLogsMultiwriter(t *testing.T) {
 	wg.Wait()
 }
 
+func TestCustomLog(t *testing.T) {
+	CustomLog(NOTICE, "TEST", "test.go", 0, "test custom log", FgAll)
+}
+
 func TestErrorsMultiwriter(t *testing.T) {
 	a := testErrorWriter{}
 	b := testBadWriter{}
@@ -101,9 +105,10 @@ func TestErrorsMultiwriter(t *testing.T) {
 	m = NewMultiWriter(m, b)
 
 	for i := 0; i < 2; i++ {
+		lenWriters := len(m.(*MultiWriter).writers)
 		_, e := m.Write([]byte("Hello "))
 		if errMultiwriter, ok := e.(MultiWriterErr); ok {
-			assert.Equal(t, len(m.(*MultiWriter).writers), len(errMultiwriter.ErrorsList))
+			assert.Equal(t, lenWriters, len(errMultiwriter.ErrorsList))
 			for _, writerErr := range errMultiwriter.ErrorsList {
 				fmt.Printf("error: %v, writer:%v\n", writerErr.Err, writerErr.Wr)
 			}

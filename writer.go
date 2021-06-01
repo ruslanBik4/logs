@@ -263,8 +263,8 @@ func ErrorLogHandler(err error, args ...interface{}) {
 func CustomLog(level Level, prefix, fileName string, line int, msg string, logFlags ...FgLogWriter) {
 	args := []interface{}{
 		errLogPrint(true),
-		"[[%s%d%s%s]]%s %s:%d: %s",
-		LogPutColor,
+		"%s[[%s]]%s %s %s:%d: %s",
+		// LogPutColor,
 		boldcolors[level],
 		prefix,
 		LogEndColor,
