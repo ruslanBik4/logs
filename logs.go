@@ -196,6 +196,12 @@ func (logger *wrapKitLogger) Printf(vars ...interface{}) {
 
 	if logger.toOther != nil {
 		go func() {
+			defer func() {
+
+				if err := recover(); err != nil {
+					_ = logger.Output(logger.callDepth, getArgsString("recover: %v,", err))
+				}
+			}()
 			_, err := logger.toOther.Write([]byte(mess))
 			if err != nil {
 				_ = logger.Output(logger.callDepth, getArgsString("Write toOther: %v,", err))
@@ -237,13 +243,15 @@ func argToString(arg interface{}) string {
 	case time.Time:
 		return val.Format("Mon Jan 2 15:04:05 -0700 MST 2006")
 	case []interface{}:
-		if len(val) > 1 {
-			return getArgsString(val...)
-		} else if len(val) > 0 {
+		switch len(val) {
+		case 0:
+			return ""
+		case 1:
 			return argToString(val[0])
+		default:
+			return getArgsString(val...)
 		}
 
-		return ""
 	case error:
 		return strings.TrimPrefix(val.Error(), "ERROR:")
 	default:
