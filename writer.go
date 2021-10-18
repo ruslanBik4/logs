@@ -136,7 +136,7 @@ func ErrorLog(err error, args ...interface{}) {
 		defer sentry.Flush(2 * time.Second)
 		args = append(args, logErr.sentryOrg, string(*(sentry.CaptureException(err))))
 		if logErr.sentryDsn > "" {
-			format += " " + logErr.sentryDsn + "%s/?query=%s"
+			format += " " + logErr.sentryDsn + "/%s/?query=%s"
 		} else {
 			format += " https://sentry.io/organizations/%s/?query=%s"
 		}
