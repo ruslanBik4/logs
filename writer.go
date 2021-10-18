@@ -134,7 +134,7 @@ func ErrorLog(err error, args ...interface{}) {
 
 	if logErr.toSentry {
 		defer sentry.Flush(2 * time.Second)
-		args = append(args, logErr.sentryOrg, string(*(sentry.CaptureException(err))))
+		args = append(args, logErr.sentryOrg, string(*(sentry.CaptureException(errors.Wrap(err, "sentry")))))
 		if logErr.sentryDsn > "" {
 			format += " " + logErr.sentryDsn + "/%s/?query=%s"
 		} else {
