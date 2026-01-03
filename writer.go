@@ -307,6 +307,5 @@ func CustomLog(level Level, prefix, fileName string, line int, msg string, logFl
 		case FgDebug:
 			logDebug.Printf(args...)
 		}
-
 	}
 }
