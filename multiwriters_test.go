@@ -110,7 +110,7 @@ func TestErrorsMultiwriter(t *testing.T) {
 		if errMultiwriter, ok := e.(MultiWriterErr); ok {
 			assert.Equal(t, lenWriters, len(errMultiwriter.ErrorsList))
 			for _, writerErr := range errMultiwriter.ErrorsList {
-				fmt.Printf("error: %v, writer:%v\n", writerErr.Err, writerErr.Wr)
+				fmt.Printf("error: %v, writer:%v\n", writerErr.err, writerErr.w)
 			}
 		} else if e != nil {
 			fmt.Println("error: ", e)

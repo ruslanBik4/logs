@@ -38,30 +38,40 @@ var (
 	}
 	ignoreFiles = []string{
 		"asm_amd64",
+		"asm_arm64",
 		"asm_amd64.s",
+		"asm_arm64.s",
 		"iface.go",
 		"map_fast32.go",
 		"panic.go",
+		"proc.go",
 		"server.go",
 		"signal_unix.go",
 		"testing.go",
 		"workerpool.go",
+		"writer.go",
 	}
 )
 
 type errLogPrint bool
 
 // Fatal - output formated (function and line calls) fatal information
-func Fatal(err error, args ...interface{}) {
+func Fatal(err error, args ...any) {
 	pc, _, _, _ := runtime.Caller(2)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	err = logErr.Output(2, fmt.Sprintf("[FATAL];%v;%v;%v", changeShortName(runtime.FuncForPC(pc).Name()),
-		err, getArgsString(args...)))
-	if err != nil {
-		fmt.Print(err)
-	}
-	os.Exit(1)
 
+	logErr.Printf(
+		errLogPrint(true),
+		"%s[[FATAL]]%s%s%s %v %v",
+		boldcolors[CRITICAL],
+		LogEndColor,
+		timeLogFormat(),
+		changeShortName(runtime.FuncForPC(pc).Name()),
+		err,
+		args,
+	)
+	ErrorStack(err, args...)
+	os.Exit(1)
 }
 
 func changeShortName(file string) (short string) {
@@ -75,8 +85,8 @@ func changeShortName(file string) (short string) {
 	return short
 }
 
-// DebugLog output formatted(function and line calls) debug information
-func DebugLog(args ...interface{}) {
+// DebugLog output formatted (function and line calls) debug information
+func DebugLog(args ...any) {
 	if *fDebug {
 		logDebug.lock.Lock()
 		defer logDebug.lock.Unlock()
@@ -89,7 +99,7 @@ func DebugLog(args ...interface{}) {
 }
 
 // StatusLog output formatted information for status
-func StatusLog(args ...interface{}) {
+func StatusLog(args ...any) {
 	if *fStatus {
 		logStat.Printf(args...)
 	}
@@ -110,7 +120,7 @@ func timeLogFormat() string {
 }
 
 // ErrorLog - output formatted (function and line calls) error information
-func ErrorLog(err error, args ...interface{}) {
+func ErrorLog(err error, args ...any) {
 	logErr.lock.Lock()
 	defer logErr.lock.Unlock()
 
@@ -118,17 +128,18 @@ func ErrorLog(err error, args ...interface{}) {
 		return
 	}
 
+	b := &strings.Builder{}
 	format, c := getFormatString(args)
 	if c > 0 {
 		// add format for error
 		if c < len(args) {
-			format = argToString(err) + "," + format
+			argToString(b, []any{err, ",", format})
 			args = args[1:]
 		} else {
 			args[0] = err
 		}
 	} else {
-		format = argsToString(err, args)
+		argsToString(b, append([]any{err}, args...))
 		args = args[:0]
 	}
 
@@ -136,9 +147,9 @@ func ErrorLog(err error, args ...interface{}) {
 		defer sentry.Flush(2 * time.Second)
 		args = append(args, logErr.sentryOrg, string(*(sentry.CaptureException(errors.Wrap(err, "sentry")))))
 		if logErr.sentryDsn > "" {
-			format += " " + logErr.sentryDsn + "/%s/?query=%s"
+			b.WriteString(" " + logErr.sentryDsn + "/%s/?query=%s")
 		} else {
-			format += " https://sentry.io/organizations/%s/?query=%s"
+			b.WriteString(" https://sentry.io/organizations/%s/?query=%s")
 		}
 	}
 
@@ -151,9 +162,9 @@ func ErrorLog(err error, args ...interface{}) {
 			fncName := fmt.Sprintf("%n", frame)
 			if !isIgnoreFile(file) && !isIgnoreFunc(fncName) {
 
-				args = append([]interface{}{
+				args = append([]any{
 					errorPrint,
-					logErr.Prefix() + "%s%s:%d: %s() " + format,
+					logErr.Prefix() + "%s%s:%d: %s() " + b.String(),
 					timeLogFormat(),
 					file,
 					frame,
@@ -180,8 +191,8 @@ func ErrorLog(err error, args ...interface{}) {
 
 		logErr.callDepth = callDepth + 1
 
-		args = append([]interface{}{
-			logErr.funcName + "() " + format,
+		args = append([]any{
+			logErr.funcName + "() " + b.String(),
 		},
 			args...)
 	}
@@ -192,23 +203,27 @@ func ErrorLog(err error, args ...interface{}) {
 const prefErrStack = "[[ERR_STACK]]"
 
 // ErrorStack - output formatted (function and line calls) error runtime stack information
-func ErrorStack(err error, args ...interface{}) {
+func ErrorStack(err error, args ...any) {
 
-	stackLine, c := getFormatString(args)
-	if c > 0 {
+	b := &strings.Builder{}
+
+	if format, c := getFormatString(args); c > 0 {
 		// add format for error
 		if c < len(args) {
-			stackLine = prefErrStack + argToString(err) + "," + stackLine
+			b.WriteString(prefErrStack)
+			argToString(b, err)
+			b.WriteRune(',')
+			b.WriteString(format)
 			args = args[1:]
 		} else {
 			args[0] = err
 		}
 	} else {
-		stackLine = argsToString(err, args)
+		argsToString(b, err, args)
 		args = args[:0]
 	}
 
-	stackLine += "\n"
+	b.WriteString("\n")
 
 	ErrFmt, ok := err.(stackTracer)
 	if ok {
@@ -217,30 +232,28 @@ func ErrorStack(err error, args ...interface{}) {
 			fileName := fmt.Sprintf("%s", frame)
 			fncName := fmt.Sprintf("%n", frame)
 			if !isIgnoreFile(fileName) && !isIgnoreFunc(fncName) {
-				stackLine += fmt.Sprintf("%s:%d %s %s()\n", fileName, frame, prefErrStack, fncName)
+				fmt.Fprintf(b, "%s:%d %s %s()\n", fileName, frame, prefErrStack, fncName)
 			}
 		}
 	} else {
-		stackLine = GetStack(stackBeginWith, stackLine)
+		WriteStack(b, stackBeginWith)
 	}
 
 	logErr.lock.Lock()
-	logErr.Printf(errLogPrint(true), stackLine)
+	logErr.Printf(errLogPrint(true), b.String())
 	logErr.lock.Unlock()
 }
 
-func GetStack(i int, stackLine string) string {
+func WriteStack(b *strings.Builder, i int) {
 	for pc, file, line, ok := runtime.Caller(i); ok; pc, file, line, ok = runtime.Caller(i) {
 		i++
 		fileName := changeShortName(file)
 		fncName := changeShortName(runtime.FuncForPC(pc).Name())
-		// пропускаем рендер ошибок
+		// skip errors rendering
 		if !isIgnoreFile(fileName) && !isIgnoreFunc(fncName) {
-			stackLine += fmt.Sprintf("%s:%d %s %s()\n", fileName, line, prefErrStack, fncName)
+			fmt.Fprintf(b, "%s:%d %s %s()\n", fileName, line, prefErrStack, fncName)
 		}
 	}
-
-	return stackLine
 }
 
 func isIgnoreFile(runFile string) bool {
@@ -263,14 +276,14 @@ func isIgnoreFunc(funcName string) bool {
 }
 
 // ErrorLogHandler - output formatted(function and line calls) error information
-func ErrorLogHandler(err error, args ...interface{}) {
+func ErrorLogHandler(err error, args ...any) {
 	ErrorStack(err, args...)
 }
 
 func CustomLog(level Level, prefix, fileName string, line int, msg string, logFlags ...FgLogWriter) {
-	args := []interface{}{
+	args := []any{
 		errLogPrint(true),
-		"%s[[%s]]%s %s %s:%d: %s",
+		"%s[[%s]]%s%s%s:%d: %s",
 		// LogPutColor,
 		boldcolors[level],
 		prefix,

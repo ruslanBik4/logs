@@ -6,6 +6,7 @@
 package logs
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -29,7 +30,7 @@ var (
 
 // LogsType - interface for print logs record
 type LogsType interface {
-	PrintToLogs() string
+	PrintToLogs(*strings.Builder) string
 }
 
 type wrapKitLogger struct {
@@ -178,7 +179,7 @@ func NewlogMess(mess string, logger *wrapKitLogger) *logMess {
 	return &logMess{mess, time.Now(), logger.typeLog}
 }
 
-func (logger *wrapKitLogger) Printf(vars ...interface{}) {
+func (logger *wrapKitLogger) Printf(vars ...any) {
 
 	checkPrint, checkType := vars[0].(errLogPrint)
 
@@ -186,89 +187,94 @@ func (logger *wrapKitLogger) Printf(vars ...interface{}) {
 		vars = vars[1:]
 	}
 
-	mess := getArgsString(vars...)
+	b := &strings.Builder{}
+	getArgsString(b, vars...)
 	if checkType && bool(checkPrint) {
-		fmt.Printf(mess + "\n")
+		fmt.Println(b.String())
 	} else {
-		_ = logger.Output(logger.callDepth, mess)
-		mess = fmt.Sprintf("%s%s:%d %s",
-			timeLogFormat(),
-			logger.fileName,
-			logger.line,
-			mess)
+		_ = logger.Output(logger.callDepth, b.String())
 	}
 
 	if logger.toOther != nil {
+		b := bytes.NewBuffer(nil)
+		if checkType && bool(checkPrint) {
+			b.WriteString(b.String())
+		} else {
+			fmt.Fprintf(b, "%s%s:%d %s",
+				timeLogFormat(),
+				logger.fileName,
+				logger.line,
+				b.String())
+		}
+
 		go func() {
 			defer func() {
-
 				if err := recover(); err != nil {
-					_ = logger.Output(logger.callDepth, getArgsString("recover: %v,", err))
+					_ = logger.Output(logger.callDepth, fmt.Sprintf("recover: %v,", err))
 				}
 			}()
-			_, err := logger.toOther.Write([]byte(mess))
+			_, err := logger.toOther.Write(b.Bytes())
 			if err != nil {
-				_ = logger.Output(logger.callDepth, getArgsString("Write toOther: %v,", err))
+				_ = logger.Output(logger.callDepth, fmt.Sprintf("Write toOther: %v,", err))
 			}
 		}()
 	}
 }
 
-func getArgsString(args ...interface{}) string {
+func getArgsString(b *strings.Builder, args ...any) {
 
 	// if first param is formatting string
 	if format, c := getFormatString(args); c > 0 {
-		return fmt.Sprintf(format, args[1:]...)
+		fmt.Fprintf(b, format, args[1:]...)
+	} else {
+		argsToString(b, args...)
 	}
-
-	return argsToString(args...)
 }
 
-func argsToString(args ...interface{}) string {
-	comma, message := "", ""
-	for _, arg := range args {
-		message += comma + argToString(arg)
-		comma = ", "
+func argsToString(b *strings.Builder, args ...any) {
+	for i, arg := range args {
+		if i > 0 {
+			b.WriteRune(',')
+		}
+		argToString(b, arg)
 	}
-
-	return message
 }
 
-func argToString(arg interface{}) string {
+func argToString(b *strings.Builder, arg any) {
 	switch val := arg.(type) {
 	case nil:
-		return " is nil"
+		b.WriteString(" is nil")
 	case string:
-		return strings.TrimPrefix(val, "ERROR:")
+		b.WriteString(strings.TrimPrefix(val, "ERROR:"))
 	case []string:
-		return strings.Join(val, "\n")
+		b.WriteString(strings.Join(val, "\n"))
 	case LogsType:
-		return val.PrintToLogs()
+		val.PrintToLogs(b)
 	case time.Time:
-		return val.Format("Mon Jan 2 15:04:05 -0700 MST 2006")
-	case []interface{}:
+		b.WriteString(val.Format("Mon Jan 2 15:04:05 -0700 MST 2006"))
+	case []any:
 		switch len(val) {
 		case 0:
-			return ""
+			b.WriteString("")
 		case 1:
-			return argToString(val[0])
+			argToString(b, val[0])
 		default:
-			return getArgsString(val...)
+			getArgsString(b, val...)
 		}
 
 	case error:
-		return strings.TrimPrefix(val.Error(), "ERROR:")
+		b.WriteString(strings.TrimPrefix(val.Error(), "ERROR:"))
 	default:
-		return fmt.Sprintf("%#v", arg)
+		fmt.Fprintf(b, "%#v", arg)
 	}
 }
 
-func getFormatString(args []interface{}) (string, int) {
+func getFormatString(args []any) (string, int) {
 	if len(args) < 2 {
 		return "", 0
 	}
 
-	if format, ok := args[0].(string); ok {
+	if format, ok := args[0].(string); ok && strings.Index(format, "%") > -1 {
 		c := strings.Count(format, "%")
 		if c < len(args)-1 {
 			format += strings.Repeat(", %v", len(args)-c-1)

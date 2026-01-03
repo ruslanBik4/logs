@@ -7,14 +7,14 @@ import (
 	"sync"
 )
 
-var ErrBadWriter = errors.New("ErrBadWriter, it will be deleted from multiwriter")
+var ErrBadWriter = errors.New("ErrBadWriter, it will be deleted from MultiWriter")
 
 type MultiWriterErr struct {
 	ErrorsList []WriterErr
 }
 
 func (mwe MultiWriterErr) Error() string {
-	return "MultiWriterErr: some writers have errors: " + mwe.String()
+	return "MultiWriterErr: " + mwe.String()
 }
 
 func (mwe MultiWriterErr) String() string {
@@ -22,7 +22,7 @@ func (mwe MultiWriterErr) String() string {
 	retStr := ""
 	for _, writerErr := range mwe.ErrorsList {
 		retStr += fmt.Sprintf("%s %s, writer: %v",
-			endl, writerErr.Err, writerErr.Wr)
+			endl, writerErr.err, writerErr.w)
 		endl = "\n"
 	}
 
@@ -30,8 +30,8 @@ func (mwe MultiWriterErr) String() string {
 }
 
 type WriterErr struct {
-	Err error
-	Wr  io.Writer
+	err error
+	w   io.Writer
 }
 
 type MultiWriter struct {
@@ -54,13 +54,13 @@ func NewMultiWriter(writers ...io.Writer) io.Writer {
 }
 
 func (t *MultiWriter) Write(p []byte) (int, error) {
-	errList := make([]WriterErr, 0)
+	errList := make([]WriterErr, 0) //errors.Join()
 	t.lock.RLock()
 	defer func() {
 		t.lock.RUnlock()
 		for _, item := range errList {
-			if item.Err == ErrBadWriter {
-				t.Remove(item.Wr)
+			if item.err == ErrBadWriter {
+				t.Remove(item.w)
 				break
 			}
 		}
