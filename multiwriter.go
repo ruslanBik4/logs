@@ -59,7 +59,7 @@ func (t *MultiWriter) Write(p []byte) (int, error) {
 	defer func() {
 		t.lock.RUnlock()
 		for _, item := range errList {
-			if item.err == ErrBadWriter {
+			if errors.Is(item.err, ErrBadWriter) {
 				t.Remove(item.w)
 				break
 			}
