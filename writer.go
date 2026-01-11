@@ -133,13 +133,13 @@ func ErrorLog(err error, args ...any) {
 	if c > 0 {
 		// add format for error
 		if c < len(args) {
-			argToString(b, []any{err, ",", format})
+			writeArg(b, []any{err, ",", format})
 			args = args[1:]
 		} else {
 			args[0] = err
 		}
 	} else {
-		argsToString(b, append([]any{err}, args...))
+		writeArgs(b, append([]any{err}, args...))
 		args = args[:0]
 	}
 
@@ -211,7 +211,7 @@ func ErrorStack(err error, args ...any) {
 		// add format for error
 		if c < len(args) {
 			b.WriteString(prefErrStack)
-			argToString(b, err)
+			writeArg(b, err)
 			b.WriteRune(',')
 			b.WriteString(format)
 			args = args[1:]
@@ -219,7 +219,7 @@ func ErrorStack(err error, args ...any) {
 			args[0] = err
 		}
 	} else {
-		argsToString(b, err, args)
+		writeArgs(b, err, args)
 		args = args[:0]
 	}
 

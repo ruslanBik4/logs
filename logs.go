@@ -30,7 +30,7 @@ var (
 
 // LogsType - interface for print logs record
 type LogsType interface {
-	PrintToLogs(*strings.Builder) string
+	PrintToLogs(w io.Writer) error
 }
 
 type wrapKitLogger struct {
@@ -187,24 +187,23 @@ func (logger *wrapKitLogger) Printf(vars ...any) {
 		vars = vars[1:]
 	}
 
-	b := &strings.Builder{}
-	getArgsString(b, vars...)
+	w := bytes.NewBuffer(nil)
+	writeFormatArgs(w, vars...)
 	if checkType && bool(checkPrint) {
-		fmt.Println(b.String())
+		fmt.Println(w.String())
 	} else {
-		_ = logger.Output(logger.callDepth, b.String())
+		_ = logger.Output(logger.callDepth, w.String())
 	}
 
-	if logger.toOther != nil {
-		b := bytes.NewBuffer(nil)
-		if checkType && bool(checkPrint) {
-			b.WriteString(b.String())
-		} else {
-			fmt.Fprintf(b, "%s%s:%d %s",
+	if logger.toOther != nil && w.Len() > 0 {
+		if !(checkType && bool(checkPrint)) {
+			msg := w.Bytes()
+			w.Reset()
+			fmt.Fprintf(w, "%s%s:%d %s",
 				timeLogFormat(),
 				logger.fileName,
 				logger.line,
-				b.String())
+				msg)
 		}
 
 		go func() {
@@ -213,7 +212,7 @@ func (logger *wrapKitLogger) Printf(vars ...any) {
 					_ = logger.Output(logger.callDepth, fmt.Sprintf("recover: %v,", err))
 				}
 			}()
-			_, err := logger.toOther.Write(b.Bytes())
+			_, err := logger.toOther.Write(w.Bytes())
 			if err != nil {
 				_ = logger.Output(logger.callDepth, fmt.Sprintf("Write toOther: %v,", err))
 			}
@@ -221,51 +220,56 @@ func (logger *wrapKitLogger) Printf(vars ...any) {
 	}
 }
 
-func getArgsString(b *strings.Builder, args ...any) {
+func writeFormatArgs(w io.Writer, args ...any) {
 
 	// if first param is formatting string
 	if format, c := getFormatString(args); c > 0 {
-		fmt.Fprintf(b, format, args[1:]...)
+		fmt.Fprintf(w, format, args[1:]...)
 	} else {
-		argsToString(b, args...)
+		writeArgs(w, args...)
 	}
 }
 
-func argsToString(b *strings.Builder, args ...any) {
+func writeArgs(w io.Writer, args ...any) {
 	for i, arg := range args {
 		if i > 0 {
-			b.WriteRune(',')
+			if _, err := w.Write([]byte{byte(',')}); err != nil {
+				fmt.Println(err)
+				break
+			}
 		}
-		argToString(b, arg)
+		writeArg(w, arg)
 	}
 }
 
-func argToString(b *strings.Builder, arg any) {
+func writeArg(w io.Writer, arg any) {
 	switch val := arg.(type) {
 	case nil:
-		b.WriteString(" is nil")
+		w.Write(s2b(" is nil"))
 	case string:
-		b.WriteString(strings.TrimPrefix(val, "ERROR:"))
+		w.Write(s2b(strings.TrimPrefix(val, "ERROR:")))
 	case []string:
-		b.WriteString(strings.Join(val, "\n"))
+		w.Write(s2b(strings.Join(val, "\n")))
 	case LogsType:
-		val.PrintToLogs(b)
+		if err := val.PrintToLogs(w); err != nil {
+			fmt.Println(err)
+		}
 	case time.Time:
-		b.WriteString(val.Format("Mon Jan 2 15:04:05 -0700 MST 2006"))
+		w.Write(s2b(val.Format("Mon Jan 2 15:04:05 -0700 MST 2006")))
 	case []any:
 		switch len(val) {
 		case 0:
-			b.WriteString("")
+			w.Write(s2b(""))
 		case 1:
-			argToString(b, val[0])
+			writeArg(w, val[0])
 		default:
-			getArgsString(b, val...)
+			writeFormatArgs(w, val...)
 		}
 
 	case error:
-		b.WriteString(strings.TrimPrefix(val.Error(), "ERROR:"))
+		w.Write(s2b(strings.TrimPrefix(val.Error(), "ERROR:")))
 	default:
-		fmt.Fprintf(b, "%#v", arg)
+		fmt.Fprintf(w, "%#v", arg)
 	}
 }
 

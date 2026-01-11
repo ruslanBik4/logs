@@ -54,6 +54,9 @@ func NewMultiWriter(writers ...io.Writer) io.Writer {
 }
 
 func (t *MultiWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return -1, nil
+	}
 	errList := make([]WriterErr, 0) //errors.Join()
 	t.lock.RLock()
 	defer func() {
