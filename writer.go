@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -162,7 +163,7 @@ func ErrorLog(err error, args ...any) {
 		for _, frame := range frames {
 			file := fmt.Sprintf("%s", frame)
 			fncName := fmt.Sprintf("%n", frame)
-			if !isIgnoreFile(file) && !isIgnoreFunc(fncName) {
+			if !isIgnoreFrame(file, fncName) {
 
 				args = append([]any{
 					errorPrint,
@@ -187,7 +188,7 @@ func ErrorLog(err error, args ...any) {
 			logErr.funcName = changeShortName(runtime.FuncForPC(pc).Name())
 			logErr.line = line
 			// пропускаем рендер ошибок
-			isIgnore = isIgnoreFile(logErr.fileName) || isIgnoreFunc(logErr.funcName)
+			isIgnore = isIgnoreFrame(logErr.fileName, logErr.funcName)
 			callDepth++
 		}
 
@@ -233,7 +234,7 @@ func ErrorStack(err error, args ...any) {
 		for _, frame := range frames[:len(frames)-2] {
 			fileName := fmt.Sprintf("%s", frame)
 			fncName := fmt.Sprintf("%n", frame)
-			if !isIgnoreFile(fileName) && !isIgnoreFunc(fncName) {
+			if !isIgnoreFrame(fileName, fncName) {
 				fmt.Fprintf(b, "%s:%d %s %s()\n", fileName, frame, prefErrStack, fncName)
 			}
 		}
@@ -246,35 +247,24 @@ func ErrorStack(err error, args ...any) {
 	logErr.lock.Unlock()
 }
 
+func isIgnoreFrame(runFile string, fncName string) bool {
+	return slices.ContainsFunc(ignoreFiles, func(name string) bool {
+		return (runFile == name) || (strings.HasPrefix(runFile, name))
+	}) && slices.ContainsFunc(ignoreFunc, func(name string) bool {
+		return (fncName == name) || (strings.HasSuffix(fncName, "."+name))
+	})
+}
+
 func WriteStack(b *strings.Builder, i int) {
 	for pc, file, line, ok := runtime.Caller(i); ok; pc, file, line, ok = runtime.Caller(i) {
 		i++
 		fileName := changeShortName(file)
 		fncName := changeShortName(runtime.FuncForPC(pc).Name())
 		// skip errors rendering
-		if !isIgnoreFile(fileName) && !isIgnoreFunc(fncName) {
+		if !isIgnoreFrame(fileName, fncName) {
 			fmt.Fprintf(b, "%s:%d %s %s()\n", fileName, line, prefErrStack, fncName)
 		}
 	}
-}
-
-func isIgnoreFile(runFile string) bool {
-	for _, name := range ignoreFiles {
-		if (runFile == name) || (strings.HasPrefix(runFile, name)) {
-			return true
-		}
-	}
-	return false
-}
-
-func isIgnoreFunc(funcName string) bool {
-	for _, name := range ignoreFunc {
-		if (funcName == name) || (strings.HasSuffix(funcName, "."+name)) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // ErrorLogHandler - output formatted(function and line calls) error information
