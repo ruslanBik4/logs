@@ -250,7 +250,7 @@ func ErrorStack(err error, args ...any) {
 func isIgnoreFrame(runFile string, fncName string) bool {
 	return slices.ContainsFunc(ignoreFiles, func(name string) bool {
 		return (runFile == name) || (strings.HasPrefix(runFile, name))
-	}) && slices.ContainsFunc(ignoreFunc, func(name string) bool {
+	}) || slices.ContainsFunc(ignoreFunc, func(name string) bool {
 		return (fncName == name) || (strings.HasSuffix(fncName, "."+name))
 	})
 }
